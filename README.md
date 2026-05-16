@@ -4,7 +4,7 @@ repeat task.wait(0.1) until game:IsLoaded()
 getgenv().main = false
 getgenv().alt  = true
 
-getgenv().AltAccounts = {"abafarmer96877567", "abafarmer912747567", "grandfarmer357215", "RicefarmerGrand1893"} -- ใส่ชื่อ alt ได้หลายคน
+getgenv().AltAccounts  = {"abafarmer96877567", "abafarmer912747567", "grandfarmer357215", "RicefarmerGrand1893"}
 -- ==================
 
 setfpscap(30)
@@ -15,30 +15,42 @@ local HttpService = game:GetService("HttpService")
 local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 
--- ตรวจว่ามี alt อยู่ในเซิฟไหม (เฉพาะ main เท่านั้น)
+-- ตรวจว่ามี alt อยู่ในเซิฟไหม (เฉพาะ main) — ตรวจตอนเริ่ม + ทุก 30 นาที
 task.spawn(function()
-	if not getgenv().main then return end -- alt ไม่ต้อง hop
+	if not getgenv().main then return end
 	task.wait(5) -- รอ player list โหลดก่อน
-	local found = false
-	for _, alt in ipairs(getgenv().AltAccounts) do
-		if Players:FindFirstChild(alt) then
-			found = true
-			break
+
+	local function checkAlts()
+		local found = false
+		for _, alt in ipairs(getgenv().AltAccounts) do
+			if Players:FindFirstChild(alt) then
+				found = true
+				break
+			end
+		end
+		if not found then
+			warn("[WWHub] Alt not found — hopping server...")
+			pcall(function()
+				game:GetService("TeleportService"):TeleportToRandomPlace(game.PlaceId)
+			end)
+		else
+			warn("[WWHub] Alt found — staying in server")
 		end
 	end
-	if not found then
-		warn("[WWHub] Alt not found — hopping server...")
-		pcall(function()
-			game:GetService("TeleportService"):TeleportToRandomPlace(game.PlaceId)
-		end)
-	else
-		warn("[WWHub] Alt found — staying in server")
+
+	checkAlts() -- ตรวจครั้งแรกตอนเริ่ม
+
+	while true do
+		task.wait(60 * 30) -- รอ 30 นาที
+		if not getgenv().main then break end
+		checkAlts()
 	end
 end)
 
-local altCFrame   = CFrame.new(20000, 2000, 20000)
-local pauseCFrame = CFrame.new(156, 1, -43)   -- safezone
-local baseName    = "WWHub_BasePlate"
+local altCFrame        = CFrame.new(20000, 2000, 20000)
+local pauseCFrame      = CFrame.new(156, 1, -43)    -- safezone main
+local pauseCFrameAlt   = CFrame.new(36, 5, -13)     -- safezone alt
+local baseName         = "WWHub_BasePlate"
 
 local tpDistanceLimit      = 18
 local safeZoneLimit        = 8
@@ -82,8 +94,12 @@ local function sendWebhook(label)
 			local moneyText, lvlText, pts = "N/A", "N/A", "N/A"
 			pcall(function()
 				moneyText = tostring(LP:WaitForChild("ReplicatedStats"):WaitForChild("Gold").Value)
-				lvlText   = LP.PlayerGui.HUD.RightBotCorner.Line2.Lvl.Text
-				pts       = tostring(LP.leaderstats.Points.Value)
+				local hud = LP.PlayerGui:FindFirstChild("HUD")
+				if hud then
+					local lvlObj = hud:FindFirstChild("RightBotCorner") and hud.RightBotCorner:FindFirstChild("Line2") and hud.RightBotCorner.Line2:FindFirstChild("Lvl")
+					if lvlObj then lvlText = lvlObj.Text end
+				end
+				pts = tostring(LP.leaderstats.Points.Value)
 			end)
 			_request({
 				Url    = WebhookURL,
@@ -155,7 +171,8 @@ local function tpToUntilArrived(cf, limit, maxTries)
 end
 
 local function tpToSafeZone()
-	tpToUntilArrived(pauseCFrame, safeZoneLimit, 20)
+	local cf = loopAlt and pauseCFrameAlt or pauseCFrame
+	tpToUntilArrived(cf, safeZoneLimit, 20)
 end
 
 local function isNearCFrame(cf, limit)
@@ -328,8 +345,10 @@ local function getPoints()
 end
 local function getTimerValue()
 	local ok, v = pcall(function()
-		local t = LP.PlayerGui.HUD.Timer
-		-- รองรับทั้ง TextLabel และ IntValue/NumberValue
+		local hud = LP.PlayerGui:FindFirstChild("HUD")
+		if not hud then return 0 end
+		local t = hud:FindFirstChild("Timer")
+		if not t then return 0 end
 		if t:IsA("TextLabel") or t:IsA("TextBox") then
 			return tonumber(t.Text) or 0
 		else
@@ -340,7 +359,11 @@ local function getTimerValue()
 end
 local function getLives()
 	local ok, v = pcall(function()
-		return tonumber(LP.PlayerGui.HUD.StockCount.Text:match("%d+")) or 0
+		local hud = LP.PlayerGui:FindFirstChild("HUD")
+		if not hud then return 0 end
+		local sc = hud:FindFirstChild("StockCount")
+		if not sc then return 0 end
+		return tonumber(sc.Text:match("%d+")) or 0
 	end)
 	return ok and v or 0
 end
@@ -544,14 +567,16 @@ panel.InputEnded:Connect(function(inp)
 		dragging = false
 	end
 end)
-UIS.InputChanged:Connect(function(inp)
-	if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement
-	or inp.UserInputType == Enum.UserInputType.Touch) then
-		local d = inp.Position - dragStart
-		panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
-		                           startPos.Y.Scale, startPos.Y.Offset + d.Y)
-	end
-end)
+if UIS then
+	UIS.InputChanged:Connect(function(inp)
+		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement
+		or inp.UserInputType == Enum.UserInputType.Touch) then
+			local d = inp.Position - dragStart
+			panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
+			                           startPos.Y.Scale, startPos.Y.Offset + d.Y)
+		end
+	end)
+end
 
 -- Header
 local header = Instance.new("Frame")
