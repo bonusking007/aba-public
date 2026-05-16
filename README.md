@@ -4,7 +4,7 @@ repeat task.wait(0.1) until game:IsLoaded()
 getgenv().main = false
 getgenv().alt  = true
 
-getgenv().AltAccounts = {"abafarmer912747567", "grandfarmer357215", "RicefarmerGrand1893"} -- ใส่ชื่อ alt ได้หลายคน
+getgenv().AltAccounts = {"abafarmer96877567", "abafarmer912747567", "grandfarmer357215", "RicefarmerGrand1893"} -- ใส่ชื่อ alt ได้หลายคน
 -- ==================
 
 setfpscap(30)
