@@ -1,7 +1,10 @@
+repeat task.wait(0.1) until game:IsLoaded()
+
 -- ===== CONFIG =====
-wait(2)
-_G.main = false
-_G.alt  = true
+getgenv().main = false
+getgenv().alt  = true
+
+getgenv().AltAccounts = {"abafarmer912747567", "grandfarmer357215", "RicefarmerGrand1893"} -- ใส่ชื่อ alt ได้หลายคน
 -- ==================
 
 setfpscap(30)
@@ -11,6 +14,27 @@ local VirtualUser = game:GetService("VirtualUser")
 local HttpService = game:GetService("HttpService")
 local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
+
+-- ตรวจว่ามี alt อยู่ในเซิฟไหม (เฉพาะ main เท่านั้น)
+task.spawn(function()
+	if not getgenv().main then return end -- alt ไม่ต้อง hop
+	task.wait(5) -- รอ player list โหลดก่อน
+	local found = false
+	for _, alt in ipairs(getgenv().AltAccounts) do
+		if Players:FindFirstChild(alt) then
+			found = true
+			break
+		end
+	end
+	if not found then
+		warn("[WWHub] Alt not found — hopping server...")
+		pcall(function()
+			game:GetService("TeleportService"):TeleportToRandomPlace(game.PlaceId)
+		end)
+	else
+		warn("[WWHub] Alt found — staying in server")
+	end
+end)
 
 local altCFrame   = CFrame.new(20000, 2000, 20000)
 local pauseCFrame = CFrame.new(156, 1, -43)   -- safezone
@@ -424,9 +448,16 @@ task.spawn(function()
 				tpToSafeZone()
 			end
 
-			-- ตาใหม่: timer กลับมาสูง → reset flag ฟาร์มต่อ
-			if timer > 30 and timerTpDone then
-				timerTpDone = false
+			-- reset flag เมื่อตาใหม่:
+			-- 1) timer กลับมาสูง
+			-- 2) team pad โผล่ = ตาใหม่เริ่มแล้ว reset ทันที
+			if timerTpDone then
+				local padExists = workspace:FindFirstChild("Red Team")
+					or workspace:FindFirstChild("Blue Team")
+					or workspace:FindFirstChild("Green Team")
+				if timer > 30 or padExists then
+					timerTpDone = false
+				end
 			end
 		else
 			pointsCapped = false
@@ -680,10 +711,10 @@ end)
 -- Auto-start จาก _G
 task.spawn(function()
 	task.wait(0.5)
-	if _G.main then
+	if getgenv().main then
 		task.spawn(function() startFarm("main") end)
 		mainBtn.BackgroundColor3 = Color3.fromRGB(40,190,100); mainBtn.Text = "⏸ MAIN"
-	elseif _G.alt then
+	elseif getgenv().alt then
 		task.spawn(function() startFarm("alt") end)
 		altBtn.BackgroundColor3 = Color3.fromRGB(40,190,100); altBtn.Text = "⏸ ALT"
 	end
@@ -801,4 +832,49 @@ task.spawn(function()
 			sendWebhook("Main Farm Report")
 		end
 	end
+end)
+
+-- Auto rejoin เมื่อโดน kick / disconnect
+local TeleportService = game:GetService("TeleportService")
+local placeId = game.PlaceId
+
+game:GetService("Players").LocalPlayer.OnTeleport:Connect(function(state)
+	if state == Enum.TeleportState.RequestedFromServer then
+		-- โดน kick by server/mod → rejoin
+		task.wait(3)
+		TeleportService:Teleport(placeId)
+	end
+end)
+
+-- ตรวจ network disconnect
+game:GetService("RunService").Heartbeat:Connect(function()
+	-- ถ้า workspace หาย = disconnect
+end)
+
+-- วิธีหลัก: ฟัง event kick
+pcall(function()
+	game:GetService("Players").LocalPlayer.Chatted:Connect(function() end) -- keep alive
+end)
+
+local function rejoin()
+	pcall(function()
+		sendWebhook("🔄 Rejoining — disconnected/kicked")
+	end)
+	task.wait(3)
+	pcall(function() TeleportService:Teleport(placeId) end)
+end
+
+-- ตรวจ parent ของ LocalPlayer หาย = kicked
+task.spawn(function()
+	local player = game:GetService("Players").LocalPlayer
+	player.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			rejoin()
+		end
+	end)
+end)
+
+-- ตรวจ game close/network fail
+game:BindToClose(function()
+	-- ไม่ทำอะไร รอ rejoin จาก AncestryChanged
 end)
